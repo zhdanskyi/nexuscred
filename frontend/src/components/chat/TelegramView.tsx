@@ -26,45 +26,52 @@ export default function TelegramView() {
   const [searchUsername, setSearchUsername] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchAllConversations = useCallback(async (userId: string) => {
-    const convos = await getMyConversations(userId);
-    setConversations(convos);
+    setIsLoadingConversations(true);
+    try {
+      const convos = await getMyConversations(userId);
+      console.log('[chat] loaded conversations', { userId, count: convos.length });
+      setConversations(convos);
 
-    if (convos.length === 0) {
-      setActiveConvo(null);
-      return;
-    }
-
-    // Persistencia: intentar restaurar la última conversación
-    const savedConvoId = localStorage.getItem('nexus_active_chat');
-    if (savedConvoId) {
-      const found = convos.find(c => c.id === savedConvoId);
-      if (found) {
-        setActiveConvo(found);
+      if (convos.length === 0) {
+        setActiveConvo(null);
         return;
       }
-    }
 
-    setActiveConvo(convos[0]);
+      // Persistencia: intentar restaurar la última conversación
+      const savedConvoId = localStorage.getItem('nexus_active_chat');
+      if (savedConvoId) {
+        const found = convos.find(c => c.id === savedConvoId);
+        if (found) {
+          setActiveConvo(found);
+          return;
+        }
+      }
+
+      setActiveConvo(convos[0]);
+    } finally {
+      setIsLoadingConversations(false);
+    }
   }, []);
 
   // Inicialización (anti-borrado): siempre recarga desde Supabase al montar
   useEffect(() => {
     const init = async () => {
       setIsInitializing(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+        const uid = session.user.id;
+        setCurrentUserId(uid);
+        await fetchAllConversations(uid);
+      } finally {
         setIsInitializing(false);
-        return;
       }
-      const uid = session.user.id;
-      setCurrentUserId(uid);
-      await fetchAllConversations(uid);
-      setIsInitializing(false);
     };
 
     init();
@@ -278,7 +285,7 @@ export default function TelegramView() {
         </AnimatePresence>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1 relative">
-          {isInitializing ? (
+          {isInitializing || isLoadingConversations ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500 gap-2">
               <Loader2 size={20} className="animate-spin text-zinc-400" />
               <span className="text-xs font-medium tracking-wide">Cargando chats...</span>

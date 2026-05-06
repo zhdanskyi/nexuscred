@@ -90,7 +90,8 @@ export async function getMyConversations(userId: string): Promise<Conversation[]
     .schema('public')
     .from('chat_members')
     .select(
-      'conversation:conversations(id, name, created_at, chat_members(user_id, profiles(full_name, username, id)))'
+      // Use explicit FK name to make PostgREST relationship resolution deterministic
+      'conversation:conversations!chat_members_conversation_id_fkey(id, name, created_at)'
     )
     .eq('user_id', userId);
 
@@ -107,7 +108,8 @@ export async function getMyConversations(userId: string): Promise<Conversation[]
   // Local sort by created_at desc (since we query members table)
   convos.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 
-  return convos.map(normalizeConversation);
+  // This query does not include nested members; fetch them lazily when opening a convo.
+  return convos.map((c) => normalizeConversation({ ...c, chat_members: [] }));
 }
 
 export async function getConversation(conversationId: string): Promise<Conversation | null> {
