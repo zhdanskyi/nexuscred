@@ -136,9 +136,12 @@ export default function TelegramView() {
     
     const fetchMsgs = async () => {
       setIsLoadingMessages(true);
-      const data = await getConversationMessages(activeConvo.id);
-      if (isMounted) setMessages(data);
-      if (isMounted) setIsLoadingMessages(false);
+      try {
+        const data = await getConversationMessages(activeConvo.id);
+        if (isMounted) setMessages(data);
+      } finally {
+        if (isMounted) setIsLoadingMessages(false);
+      }
     };
     
     fetchMsgs();
@@ -181,11 +184,15 @@ export default function TelegramView() {
     const text = messageText;
     setMessageText(''); 
     
-    await supabase.schema('public').from('messages').insert({
+    const { error } = await supabase.schema('public').from('messages').insert({
       sender_id: currentUserId,
       conversation_id: activeConvo.id,
       content: text
     });
+    if (error) {
+      console.error('[chat] insert messages failed', error);
+      alert(`Error enviando mensaje (messages): ${error.message}`);
+    }
   };
 
   const startChat = async () => {

@@ -68,6 +68,7 @@ export async function findProfileByEmailOrUsername(input: string): Promise<Profi
       .single();
 
     if (!error && data) return data;
+    console.warn('[chat] profiles lookup by email failed or not found', { email: trimmed, error });
   }
 
   // 2) Fallback to username lookup (common case in this repo schema)
@@ -93,7 +94,11 @@ export async function getMyConversations(userId: string): Promise<Conversation[]
     )
     .eq('user_id', userId);
 
-  if (error || !data) return [];
+  if (error) {
+    console.error('[chat] select chat_members->conversations failed', error);
+    return [];
+  }
+  if (!data) return [];
 
   const convos = (data as any[])
     .map((row) => row.conversation)
@@ -113,7 +118,11 @@ export async function getConversation(conversationId: string): Promise<Conversat
     .eq('id', conversationId)
     .single();
 
-  if (error || !data) return null;
+  if (error) {
+    console.error('[chat] select conversations failed', error);
+    return null;
+  }
+  if (!data) return null;
   return normalizeConversation(data);
 }
 
@@ -125,7 +134,11 @@ export async function getConversationMessages(conversationId: string): Promise<C
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
-  if (error || !data) return [];
+  if (error) {
+    console.error('[chat] select messages failed', error);
+    return [];
+  }
+  if (!data) return [];
   return (data as any[]).map((m) => ({
     ...m,
     sender: Array.isArray(m.sender) ? m.sender[0] ?? null : m.sender ?? null,
