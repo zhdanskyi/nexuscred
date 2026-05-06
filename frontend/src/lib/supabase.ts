@@ -30,7 +30,8 @@ export interface Credential {
 export interface Message {
   id: string;
   sender_id: string;
-  recipient_id: string;
+  recipient_id: string | null;
+  conversation_id?: string | null;
   content: string;
   is_read: boolean;
   created_at: string;
