@@ -50,17 +50,17 @@ export default function AuditStream() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <GlassCard variant="elevated" hover={false} className="p-5 flex items-center justify-between shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+      <GlassCard variant="elevated" hover={false} className="p-5 flex items-center justify-between shadow-2xl shadow-white/5">
         <div className="flex items-center gap-3">
-          <Activity size={15} className="text-white/80" />
+          <Activity size={15} className="text-white/40" />
           <div>
-            <h3 className="text-sm font-medium text-slate-100">Stream de Auditoría</h3>
-            <p className="text-[10px] text-white/70">Registro inmutable en tiempo real</p>
+            <h3 className="text-sm font-medium text-white">Stream de Auditoría</h3>
+            <p className="text-[10px] text-zinc-400">Registro inmutable en tiempo real</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-pulse" />
-          <span className="text-[10px] text-emerald-100/80 font-mono">LIVE</span>
+          <div className="w-2 h-2 rounded-full bg-emerald-500/50 animate-pulse" />
+          <span className="text-[10px] text-emerald-500/50 font-mono">LIVE</span>
         </div>
       </GlassCard>
 
@@ -76,21 +76,21 @@ export default function AuditStream() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             >
-              <GlassCard className="p-4 flex items-center gap-4 !rounded-xl border-white/20" glow>
-                <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-xl border border-white/30 flex items-center justify-center shrink-0 shadow-inner">
+              <GlassCard className="p-4 flex items-center gap-4 !rounded-xl border-white/10" glow>
+                <div className="w-8 h-8 rounded-lg bg-black/40 backdrop-blur-xl border border-white/10 flex items-center justify-center shrink-0 shadow-inner">
                   <Icon size={12} className={config.color} strokeWidth={1.5} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className={`text-[10px] uppercase tracking-wider font-medium ${config.color}`}>{config.label}</span>
-                    <span className="text-[10px] text-white/40">·</span>
-                    <span className="text-[10px] text-white/60 font-mono">{entry.timestamp}</span>
+                    <span className="text-[10px] text-zinc-600">·</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">{entry.timestamp}</span>
                   </div>
-                  <p className="text-[11px] text-slate-100 font-light truncate">
+                  <p className="text-[11px] text-white/50 font-light truncate">
                     <span className="text-white font-medium">{entry.actor}</span> — {entry.credentialTitle}
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 text-white/40 shrink-0">
+                <div className="flex items-center gap-1.5 text-zinc-600 shrink-0">
                   <Hash size={8} />
                   <span className="text-[9px] font-mono">{entry.hash}</span>
                 </div>

@@ -50,10 +50,10 @@ export default function Dashboard() {
       animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-      className="flex h-screen bg-gradient-to-br from-indigo-950 via-slate-900 to-cyan-950"
+      className="flex h-screen bg-black"
     >
       {/* ── Sidebar ─────────────────────────────────── */}
-      <aside className={`${mobileMenu ? 'flex' : 'hidden'} lg:flex flex-col w-64 h-full bg-white/5 backdrop-blur-3xl border-r border-white/20 fixed lg:relative z-40 shadow-[0_0_50px_rgba(255,255,255,0.05)]`}>
+      <aside className={`${mobileMenu ? 'flex' : 'hidden'} lg:flex flex-col w-64 h-full bg-black/60 backdrop-blur-2xl border-r border-white/10 fixed lg:relative z-40 shadow-2xl shadow-white/5`}>
         {/* Logo */}
         <div className="px-5 py-5 border-b border-white/[0.03]">
           <div className="flex items-center justify-between">
@@ -94,8 +94,8 @@ export default function Dashboard() {
               onClick={() => { setActiveTab(id); setMobileMenu(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
                 activeTab === id
-                  ? 'bg-white/20 backdrop-blur-2xl border border-white/40 text-white shadow-[0_0_20px_rgba(255,255,255,0.2)]'
-                  : 'text-slate-100/60 hover:text-white hover:bg-white/10'
+                  ? 'bg-zinc-900/80 backdrop-blur-2xl border border-white/10 text-white shadow-[0_0_15px_rgba(255,255,255,0.05)]'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
               }`}
             >
               <Icon size={15} strokeWidth={1.5} />
