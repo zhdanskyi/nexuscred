@@ -8,6 +8,8 @@ import CryptoVault from '@/components/crypto/CryptoVault';
 import TelegramView from '@/components/chat/TelegramView';
 import AuditStream from '@/components/dashboard/AuditStream';
 import { useApp } from '@/context/AppContext';
+import { supabase } from '@/lib/supabase';
+import { useEffect } from 'react';
 
 export type DashboardTab = 'credentials' | 'chat' | 'audit';
 
@@ -21,6 +23,26 @@ export default function Dashboard() {
   const { logout, user } = useApp();
   const [activeTab, setActiveTab] = useState<DashboardTab>('credentials');
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+        
+        const res = await fetch('/api/messages', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const unread = data.filter((m: any) => m.recipient_id === session.user.id && !m.is_read).length;
+          setUnreadCount(unread);
+        }
+      } catch (err) {}
+    };
+    fetchUnread();
+  }, []);
 
   return (
     <motion.div
@@ -78,8 +100,8 @@ export default function Dashboard() {
             >
               <Icon size={15} strokeWidth={1.5} />
               <span>{label}</span>
-              {id === 'chat' && (
-                <span className="ml-auto w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[9px] text-white/25">3</span>
+              {id === 'chat' && unreadCount > 0 && (
+                <span className="ml-auto w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[9px] text-white/25">{unreadCount}</span>
               )}
             </motion.button>
           ))}

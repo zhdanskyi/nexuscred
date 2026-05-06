@@ -6,6 +6,7 @@ import { Shield, Lock, Cpu, Hash, CheckCircle2, Plus } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
 import GlassButton from '@/components/ui/GlassButton';
 import { useHasher } from '@/components/crypto/Hasher';
+import { supabase } from '@/lib/supabase';
 
 interface VaultCredential {
   id: string;
@@ -16,10 +17,38 @@ interface VaultCredential {
 }
 
 export default function CryptoVault() {
-  const [credentials, setCredentials] = useState<VaultCredential[]>([
-    { id: '1', title: 'Blockchain Developer', worker: 'Elena Rodríguez', hash: 'a7f3c9e2d1b406f8e3a29d7c5b1e8f4a2d6c9b3e7f1a5d8c2b6e9f3a7d1c5b8', timestamp: '2026-04-28T10:30:00Z' },
-    { id: '2', title: 'Smart Contract Auditor', worker: 'Marco Vidal', hash: 'b8e4d0f3a2c517e9d4b3ae8c6c2f9a5b3e7d1a6c8f2b5e9a3d7c1f4b8e2a6d9', timestamp: '2026-05-01T14:15:00Z' },
-  ]);
+  const [credentials, setCredentials] = useState<VaultCredential[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchCredentials = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/credentials', {
+        headers: {
+          'Authorization': `Bearer ${session?.access_token || ''}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const mapped = data.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          worker: item.profiles?.full_name || item.metadata?.worker_name_fallback || 'Unknown',
+          hash: item.proof_hash,
+          timestamp: item.created_at
+        }));
+        setCredentials(mapped);
+      }
+    } catch (err) {
+      console.error('Error fetching credentials:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCredentials();
+  }, []);
 
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ title: '', worker: '', description: '' });
@@ -58,25 +87,43 @@ export default function CryptoVault() {
 
   // Save credential when hash is complete
   useEffect(() => {
-    if (hash && !isHashing && !isRevealing && formData.title) {
-      setCredentials((prev) => [
-        {
-          id: String(Date.now()),
-          title: formData.title,
-          worker: formData.worker,
-          hash,
-          timestamp: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
-      setTimeout(() => {
-        setFormData({ title: '', worker: '', description: '' });
-        setShowForm(false);
-        reset();
-        setRevealedHash('');
-      }, 3000);
-    }
-  }, [hash, isHashing, isRevealing, formData.title, formData.worker, reset]);
+    const saveCredential = async () => {
+      if (hash && !isHashing && !isRevealing && formData.title) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await fetch('/api/credentials', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token || ''}`
+            },
+            body: JSON.stringify({
+              title: formData.title,
+              description: formData.description,
+              worker_name: formData.worker,
+              proof_hash: hash,
+              metadata: { worker_name_fallback: formData.worker }
+            })
+          });
+
+          if (res.ok) {
+            await fetchCredentials(); // Refresh list
+          }
+        } catch (error) {
+          console.error('Error saving credential:', error);
+        }
+
+        setTimeout(() => {
+          setFormData({ title: '', worker: '', description: '' });
+          setShowForm(false);
+          reset();
+          setRevealedHash('');
+        }, 3000);
+      }
+    };
+
+    saveCredential();
+  }, [hash, isHashing, isRevealing, formData.title, formData.worker, formData.description, reset]);
 
   return (
     <div className="space-y-6">

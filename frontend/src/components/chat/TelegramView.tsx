@@ -3,57 +3,94 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Send, Paperclip, Shield } from 'lucide-react';
-import GlassCard from '@/components/ui/GlassCard';
+import { supabase } from '@/lib/supabase';
 
 interface ChatMessage {
   id: string;
-  sender: string;
-  isMe: boolean;
+  sender_id: string;
+  recipient_id: string;
   content: string;
-  time: string;
-  type: 'text' | 'system';
+  created_at: string;
+  sender: any;
+  recipient: any;
 }
 
-const contacts = [
-  { id: '1', name: 'Elena Rodríguez', role: 'Freelancer', initials: 'ER', lastMsg: 'Credencial verificada ✓', time: '2m', unread: 2 },
-  { id: '2', name: 'Marco Vidal', role: 'Auditor', initials: 'MV', lastMsg: 'Revisando certificado...', time: '15m', unread: 1 },
-  { id: '3', name: 'Ana Torres', role: 'Company', initials: 'AT', lastMsg: 'Hash confirmado', time: '1h', unread: 0 },
-  { id: '4', name: 'Luis Méndez', role: 'Freelancer', initials: 'LM', lastMsg: 'Bienvenido al sistema', time: '2d', unread: 0 },
-];
-
-const initialMessages: ChatMessage[] = [
-  { id: '1', sender: 'Elena Rodríguez', isMe: false, content: 'Acabo de recibir la credencial, verificando el hash...', time: '10:23', type: 'text' },
-  { id: '2', sender: 'Yo', isMe: true, content: 'El SHA-256 debería coincidir con el registro del ledger.', time: '10:24', type: 'text' },
-  { id: '3', sender: 'Elena Rodríguez', isMe: false, content: '✓ Hash verificado: a7f3c9e2d1b4...', time: '10:25', type: 'text' },
-  { id: '4', sender: 'Sistema', isMe: false, content: '🔒 Credencial "Blockchain Developer" compartida', time: '10:25', type: 'system' },
-  { id: '5', sender: 'Elena Rodríguez', isMe: false, content: 'Todo en orden. La auditoría está completa.', time: '10:26', type: 'text' },
-];
-
 export default function TelegramView() {
-  const [activeContact, setActiveContact] = useState(contacts[0]);
-  const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageText, setMessageText] = useState('');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchMessages = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) setCurrentUserId(session.user.id);
+      
+      const res = await fetch('/api/messages', {
+        headers: { 'Authorization': `Bearer ${session?.access_token || ''}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data);
+      }
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchMessages();
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
-    if (!message.trim()) return;
-    setMessages([
-      ...messages,
-      {
-        id: String(Date.now()),
-        sender: 'Yo',
-        isMe: true,
-        content: message,
-        time: new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }),
-        type: 'text',
-      },
-    ]);
-    setMessage('');
+  const handleSend = async () => {
+    if (!messageText.trim()) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`
+        },
+        body: JSON.stringify({
+          content: messageText,
+          recipient_id: null // Broadcasting to all for MVP
+        })
+      });
+      
+      if (res.ok) {
+        setMessageText('');
+        fetchMessages();
+      }
+    } catch (err) {
+      console.error('Error sending message:', err);
+    }
   };
+
+  // Derive unique contacts from messages
+  const uniqueContactsMap = new Map();
+  messages.forEach(msg => {
+    if (msg.sender_id !== currentUserId && msg.sender) {
+      uniqueContactsMap.set(msg.sender_id, msg.sender);
+    }
+  });
+  const dynamicContacts = Array.from(uniqueContactsMap.entries()).map(([id, sender]) => ({
+    id,
+    name: sender.full_name || sender.username || 'Usuario',
+    initials: (sender.full_name || sender.username || 'U').substring(0, 2).toUpperCase(),
+    role: 'Miembro'
+  }));
+  
+  if (dynamicContacts.length === 0) {
+    dynamicContacts.push({ id: 'system', name: 'Chat General', initials: 'CG', role: 'Canal' });
+  }
+
+  const [activeContact, setActiveContact] = useState(dynamicContacts[0]);
 
   return (
     <div className="flex h-[calc(100vh-10rem)] gap-4">
@@ -63,7 +100,7 @@ export default function TelegramView() {
           <h3 className="text-sm font-light text-white/50">Mensajes</h3>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {contacts.map((c, i) => (
+          {dynamicContacts.map((c, i) => (
             <motion.button
               key={c.id}
               initial={{ opacity: 0, x: -15 }}
@@ -71,7 +108,7 @@ export default function TelegramView() {
               transition={{ delay: i * 0.05 }}
               onClick={() => setActiveContact(c)}
               className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all duration-300 ${
-                activeContact.id === c.id ? 'bg-white/[0.05] border border-white/[0.06]' : 'hover:bg-white/[0.02]'
+                activeContact?.id === c.id ? 'bg-white/[0.05] border border-white/[0.06]' : 'hover:bg-white/[0.02]'
               }`}
             >
               <div className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-xl border border-white/5 flex items-center justify-center text-xs text-white/30 font-medium shrink-0">
@@ -80,13 +117,9 @@ export default function TelegramView() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-white/50 font-light truncate">{c.name}</span>
-                  <span className="text-[10px] text-white/15 shrink-0">{c.time}</span>
                 </div>
-                <p className="text-[11px] text-white/20 truncate">{c.lastMsg}</p>
+                <p className="text-[11px] text-white/20 truncate">{c.role}</p>
               </div>
-              {c.unread > 0 && (
-                <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-white/40 shrink-0">{c.unread}</div>
-              )}
             </motion.button>
           ))}
         </div>
@@ -97,11 +130,11 @@ export default function TelegramView() {
         {/* Chat Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.04]">
           <div className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-xl border border-white/5 flex items-center justify-center text-xs text-white/30 font-medium">
-            {activeContact.initials}
+            {activeContact?.initials || 'CG'}
           </div>
           <div>
-            <p className="text-sm text-white/60 font-light">{activeContact.name}</p>
-            <p className="text-[10px] text-white/15">{activeContact.role}</p>
+            <p className="text-sm text-white/60 font-light">{activeContact?.name || 'Chat General'}</p>
+            <p className="text-[10px] text-white/15">{activeContact?.role || 'Canal'}</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
@@ -111,33 +144,31 @@ export default function TelegramView() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {messages.map((msg, i) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03 }}
-              className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}
-            >
-              {msg.type === 'system' ? (
-                <GlassCard variant="subtle" hover={false} className="px-4 py-2 mx-auto">
-                  <div className="flex items-center gap-2">
-                    <Shield size={11} className="text-white/15" />
-                    <p className="text-[11px] text-white/20">{msg.content}</p>
-                  </div>
-                </GlassCard>
-              ) : (
+          {messages.map((msg, i) => {
+            const isMe = msg.sender_id === currentUserId;
+            const msgTime = new Date(msg.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.03 }}
+                className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+              >
                 <div className={`max-w-[70%] px-4 py-3 rounded-2xl ${
-                  msg.isMe
+                  isMe
                     ? 'bg-black/50 backdrop-blur-2xl border border-white/8'
                     : 'bg-black/30 backdrop-blur-xl border border-white/[0.04]'
                 }`}>
+                  {!isMe && msg.sender && (
+                    <p className="text-[10px] text-emerald-400/50 mb-1">{msg.sender.full_name || msg.sender.username}</p>
+                  )}
                   <p className="text-sm text-white/55 font-light leading-relaxed">{msg.content}</p>
-                  <p className="text-[10px] text-white/10 mt-1.5 text-right">{msg.time}</p>
+                  <p className="text-[10px] text-white/10 mt-1.5 text-right">{msgTime}</p>
                 </div>
-              )}
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
 
@@ -150,8 +181,8 @@ export default function TelegramView() {
             <input
               id="telegram-chat-input"
               type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Escribe un mensaje..."
               className="flex-1 bg-transparent text-sm text-white/55 placeholder-white/10 outline-none font-light"
