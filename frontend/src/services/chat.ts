@@ -4,6 +4,8 @@ export type ProfileLite = {
   id: string;
   full_name: string | null;
   username: string | null;
+  avatar_url?: string | null;
+  updated_at?: string;
 };
 
 export type ChatMemberRow = {
@@ -19,6 +21,8 @@ export type ConversationMember = {
 export type ConversationRow = {
   id: string;
   name: string | null;
+  is_group?: boolean | null;
+  group_avatar?: string | null;
   created_at: string;
   chat_members?: ChatMemberRow[];
 };
@@ -26,6 +30,8 @@ export type ConversationRow = {
 export type Conversation = {
   id: string;
   name: string | null;
+  is_group?: boolean | null;
+  group_avatar?: string | null;
   created_at: string;
   members: ConversationMember[];
 };
@@ -33,8 +39,11 @@ export type Conversation = {
 export type ChatMessage = {
   id: string;
   sender_id: string;
+  recipient_id?: string | null;
   conversation_id: string;
   content: string;
+  is_read?: boolean;
+  read_at?: string | null;
   created_at: string;
   sender: ProfileLite | null;
 };
@@ -49,6 +58,8 @@ function normalizeConversation(row: ConversationRow): Conversation {
   return {
     id: row.id,
     name: row.name,
+    is_group: row.is_group ?? false,
+    group_avatar: row.group_avatar ?? null,
     created_at: row.created_at,
     members,
   };
@@ -91,7 +102,7 @@ export async function getMyConversations(userId: string): Promise<Conversation[]
     .from('chat_members')
     .select(
       // Use explicit FK name to make PostgREST relationship resolution deterministic
-      'conversation:conversations!chat_members_conversation_id_fkey(id, name, created_at)'
+      'conversation:conversations!chat_members_conversation_id_fkey(id, name, is_group, group_avatar, created_at)'
     )
     .eq('user_id', userId);
 
@@ -108,15 +119,41 @@ export async function getMyConversations(userId: string): Promise<Conversation[]
   // Local sort by created_at desc (since we query members table)
   convos.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 
-  // This query does not include nested members; fetch them lazily when opening a convo.
-  return convos.map((c) => normalizeConversation({ ...c, chat_members: [] }));
+  // Fetch members for these conversations in one go (for smart 1:1 titles)
+  const convoIds = convos.map((c) => c.id);
+  const { data: membersData, error: membersError } = await supabase
+    .schema('public')
+    .from('chat_members')
+    .select('conversation_id, user_id, profiles(id, full_name, username, avatar_url, updated_at)')
+    .in('conversation_id', convoIds);
+
+  if (membersError) {
+    console.error('[chat] select chat_members(members) failed', membersError);
+    return convos.map((c) => normalizeConversation({ ...c, chat_members: [] }));
+  }
+
+  const membersByConvo = new Map<string, ChatMemberRow[]>();
+  for (const row of (membersData ?? []) as any[]) {
+    const list = membersByConvo.get(row.conversation_id) ?? [];
+    list.push({ user_id: row.user_id, profiles: row.profiles ?? null });
+    membersByConvo.set(row.conversation_id, list);
+  }
+
+  return convos.map((c) =>
+    normalizeConversation({
+      ...c,
+      chat_members: membersByConvo.get(c.id) ?? [],
+    })
+  );
 }
 
 export async function getConversation(conversationId: string): Promise<Conversation | null> {
   const { data, error } = await supabase
     .schema('public')
     .from('conversations')
-    .select('id, name, created_at, chat_members(user_id, profiles(full_name, username, id))')
+    .select(
+      'id, name, is_group, group_avatar, created_at, chat_members(user_id, profiles(full_name, username, id, avatar_url, updated_at))'
+    )
     .eq('id', conversationId)
     .single();
 
@@ -132,7 +169,9 @@ export async function getConversationMessages(conversationId: string): Promise<C
   const { data, error } = await supabase
     .schema('public')
     .from('messages')
-    .select('id, sender_id, conversation_id, content, created_at, sender:profiles!messages_sender_id_fkey(id, full_name, username)')
+    .select(
+      'id, sender_id, conversation_id, content, is_read, read_at, created_at, sender:profiles!messages_sender_id_fkey(id, full_name, username, avatar_url, updated_at)'
+    )
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
@@ -151,17 +190,23 @@ export async function createConversationAndMembers(params: {
   currentUserId: string;
   otherUserId: string;
   name?: string | null;
+  isGroup?: boolean;
+  groupAvatar?: string | null;
 }): Promise<
   | { conversationId: string }
   | { error: string; stage: 'conversations' | 'chat_members:self' | 'chat_members:friend' }
 > {
-  const { currentUserId, otherUserId, name } = params;
+  const { currentUserId, otherUserId, name, isGroup, groupAvatar } = params;
 
   // 1) INSERT conversations (atomic step 1)
   const { data: convo, error: convoError } = await supabase
     .schema('public')
     .from('conversations')
-    .insert({ name: name ?? 'Chat Privado' })
+    .insert({
+      name: name ?? 'Chat Privado',
+      is_group: isGroup ?? false,
+      group_avatar: groupAvatar ?? null,
+    })
     .select('id')
     .single();
 
@@ -193,6 +238,56 @@ export async function createConversationAndMembers(params: {
   if (friendMemberError) {
     console.error('[chat] insert chat_members(friend) failed', friendMemberError);
     return { error: friendMemberError.message, stage: 'chat_members:friend' };
+  }
+
+  return { conversationId: convo.id };
+}
+
+export async function createGroupConversation(params: {
+  currentUserId: string;
+  groupName: string;
+  memberUserIds: string[];
+  groupAvatar?: string | null;
+}): Promise<
+  | { conversationId: string }
+  | { error: string; stage: 'conversations' | 'chat_members:self' | 'chat_members:members' }
+> {
+  const { currentUserId, groupName, memberUserIds, groupAvatar } = params;
+
+  const { data: convo, error: convoError } = await supabase
+    .schema('public')
+    .from('conversations')
+    .insert({
+      name: groupName,
+      is_group: true,
+      group_avatar: groupAvatar ?? null,
+    })
+    .select('id')
+    .single();
+
+  if (convoError || !convo?.id) {
+    console.error('[chat] insert group conversations failed', convoError);
+    return { error: convoError?.message ?? 'No se pudo crear el grupo.', stage: 'conversations' };
+  }
+
+  const { error: selfMemberError } = await supabase
+    .schema('public')
+    .from('chat_members')
+    .insert({ conversation_id: convo.id, user_id: currentUserId });
+
+  if (selfMemberError) {
+    console.error('[chat] insert group chat_members(self) failed', selfMemberError);
+    return { error: selfMemberError.message, stage: 'chat_members:self' };
+  }
+
+  const uniqueMemberIds = Array.from(new Set(memberUserIds.filter(Boolean))).filter((id) => id !== currentUserId);
+  if (uniqueMemberIds.length === 0) return { conversationId: convo.id };
+
+  const rows = uniqueMemberIds.map((id) => ({ conversation_id: convo.id, user_id: id }));
+  const { error: membersError } = await supabase.schema('public').from('chat_members').insert(rows);
+  if (membersError) {
+    console.error('[chat] insert group chat_members(members) failed', membersError);
+    return { error: membersError.message, stage: 'chat_members:members' };
   }
 
   return { conversationId: convo.id };
