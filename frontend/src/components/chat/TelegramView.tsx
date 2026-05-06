@@ -240,7 +240,7 @@ export default function TelegramView() {
   return (
     <div className="flex h-[calc(100vh-10rem)] gap-4">
       {/* Contact List */}
-      <div className="hidden md:flex flex-col w-72 bg-black/90 backdrop-blur-3xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5 relative">
+      <div className="hidden md:flex flex-col w-72 bg-black backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5 relative">
         <div className="p-4 border-b border-white/10 flex justify-between items-center z-10">
           <h3 className="text-sm font-medium text-white">Mensajes</h3>
           <button onClick={() => setShowAddForm(!showAddForm)} className="text-zinc-400 hover:text-white transition-colors">
@@ -316,7 +316,7 @@ export default function TelegramView() {
       </div>
 
       {/* Chat Panel */}
-      <div className="flex-1 flex flex-col bg-black/90 backdrop-blur-3xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5 relative">
+      <div className="flex-1 flex flex-col bg-black backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5 relative">
         {isInitializing ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader2 size={24} className="animate-spin text-zinc-500" />
@@ -324,7 +324,7 @@ export default function TelegramView() {
         ) : activeConvo ? (
           <>
             {/* Chat Header */}
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10 bg-white/5 backdrop-blur-3xl">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10 bg-white/5 backdrop-blur-2xl">
               <div className="w-9 h-9 rounded-full bg-black/40 backdrop-blur-xl border border-white/10 flex items-center justify-center text-xs text-white font-medium">
                 #
               </div>
@@ -380,7 +380,7 @@ export default function TelegramView() {
 
             {/* Input */}
             <div className="p-3 border-t border-white/10 bg-white/5">
-              <div className="flex items-center gap-3 bg-black/50 backdrop-blur-3xl border border-white/10 rounded-2xl px-4 py-3 shadow-inner">
+              <div className="flex items-center gap-3 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl px-4 py-3 shadow-inner">
                 <button className="text-zinc-500 hover:text-white transition-colors">
                   <Paperclip size={16} />
                 </button>

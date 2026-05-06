@@ -136,10 +136,13 @@ export async function createConversationAndMembers(params: {
   currentUserId: string;
   otherUserId: string;
   name?: string | null;
-}): Promise<{ conversationId: string } | { error: string; stage: 'conversations' | 'chat_members' }> {
+}): Promise<
+  | { conversationId: string }
+  | { error: string; stage: 'conversations' | 'chat_members:self' | 'chat_members:friend' }
+> {
   const { currentUserId, otherUserId, name } = params;
 
-  // 1) Create conversation
+  // 1) INSERT conversations (atomic step 1)
   const { data: convo, error: convoError } = await supabase
     .schema('public')
     .from('conversations')
@@ -149,21 +152,32 @@ export async function createConversationAndMembers(params: {
 
   if (convoError || !convo?.id) {
     console.error('[chat] insert conversations failed', convoError);
-    return { error: convoError?.message ?? 'No se pudo crear la conversación.', stage: 'conversations' };
+    return {
+      error: convoError?.message ?? 'No se pudo crear la conversación.',
+      stage: 'conversations',
+    };
   }
 
-  // 2) Insert TWO chat_members rows (crucial)
-  const { error: membersError } = await supabase
+  // 2) INSERT chat_members for self (atomic step 2)
+  const { error: selfMemberError } = await supabase
     .schema('public')
     .from('chat_members')
-    .insert([
-      { conversation_id: convo.id, user_id: currentUserId },
-      { conversation_id: convo.id, user_id: otherUserId },
-    ]);
+    .insert({ conversation_id: convo.id, user_id: currentUserId });
 
-  if (membersError) {
-    console.error('[chat] insert chat_members failed', membersError);
-    return { error: membersError.message, stage: 'chat_members' };
+  if (selfMemberError) {
+    console.error('[chat] insert chat_members(self) failed', selfMemberError);
+    return { error: selfMemberError.message, stage: 'chat_members:self' };
+  }
+
+  // 3) INSERT chat_members for friend (atomic step 3)
+  const { error: friendMemberError } = await supabase
+    .schema('public')
+    .from('chat_members')
+    .insert({ conversation_id: convo.id, user_id: otherUserId });
+
+  if (friendMemberError) {
+    console.error('[chat] insert chat_members(friend) failed', friendMemberError);
+    return { error: friendMemberError.message, stage: 'chat_members:friend' };
   }
 
   return { conversationId: convo.id };
