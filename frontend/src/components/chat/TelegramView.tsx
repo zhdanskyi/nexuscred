@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { Send, Paperclip, UserPlus } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Send, Paperclip, UserPlus, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import GlassButton from '@/components/ui/GlassButton';
 
@@ -31,10 +31,11 @@ export default function TelegramView() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchUsername, setSearchUsername] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Funciones de fetch extraídas para reusabilidad
+  // Funciones de fetch
   const fetchSingleConversation = async (convoId: string) => {
     const { data: convo } = await supabase
       .schema('public')
@@ -61,10 +62,10 @@ export default function TelegramView() {
         .in('id', convoIds)
         .order('created_at', { ascending: false });
       
-      if (convos) {
+      if (convos && convos.length > 0) {
         setConversations(convos);
         
-        // Restaurar estado de sesión (persistencia entre pestañas)
+        // Persistencia: Intentar cargar la última conversación seleccionada desde localStorage
         const savedConvoId = localStorage.getItem('nexus_active_chat');
         if (savedConvoId) {
           const found = convos.find(c => c.id === savedConvoId);
@@ -74,29 +75,40 @@ export default function TelegramView() {
           }
         }
         
-        // Fallback al primero
+        // Si no hay guardada o no se encontró, usar la primera
         setActiveConvo(convos[0]);
+      } else {
+        setConversations([]);
+        setActiveConvo(null);
       }
+    } else {
+      setConversations([]);
+      setActiveConvo(null);
     }
   }, []);
 
-  // Inicialización y Realtime de Nuevas Conversaciones
+  // Inicialización y Suscripción a Nuevos Chats (Realtime Total)
   useEffect(() => {
     let userId = '';
     
     const init = async () => {
+      setIsInitializing(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
+      if (!session?.user) {
+        setIsInitializing(false);
+        return;
+      }
       userId = session.user.id;
       setCurrentUserId(userId);
       await fetchAllConversations(userId);
+      setIsInitializing(false);
     };
 
     init();
 
-    // Escuchar si alguien nos añade a una nueva conversación en chat_members
+    // Escuchar si alguien nos añade a un chat_members en tiempo real
     const membersChannel = supabase
-      .channel('chat_members_inserts')
+      .channel('public:chat_members_inserts')
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
@@ -119,7 +131,7 @@ export default function TelegramView() {
     };
   }, [fetchAllConversations]);
 
-  // Manejar el cambio manual de conversación para guardar el estado
+  // Manejar el cambio manual de conversación para persistirlo
   const handleSelectConvo = (convo: Conversation) => {
     setActiveConvo(convo);
     localStorage.setItem('nexus_active_chat', convo.id);
@@ -146,8 +158,8 @@ export default function TelegramView() {
     
     fetchMsgs();
 
-    const channel = supabase
-      .channel(`room:${activeConvo.id}`)
+    const messagesChannel = supabase
+      .channel(`public:messages:${activeConvo.id}`)
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
@@ -168,16 +180,17 @@ export default function TelegramView() {
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messagesChannel);
     };
   }, [activeConvo]);
 
+  // Auto-scroll al recibir mensajes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSend = async () => {
-    if (!messageText.trim() || !activeConvo) return;
+    if (!messageText.trim() || !activeConvo || !currentUserId) return;
     const text = messageText;
     setMessageText(''); 
     
@@ -192,8 +205,8 @@ export default function TelegramView() {
     if (!searchUsername.trim()) return;
     setIsAdding(true);
     try {
+      // 1. Buscar al destinatario en public.profiles
       const targetUsername = searchUsername.split('@')[0];
-      
       const { data: userToAdd, error: userError } = await supabase
         .schema('public')
         .from('profiles')
@@ -202,13 +215,13 @@ export default function TelegramView() {
         .single();
       
       if (userError || !userToAdd) {
-        console.error('Usuario no encontrado en public.profiles:', userError);
-        alert('Usuario no encontrado en la base de datos.');
+        console.error('Usuario no encontrado:', userError);
+        alert('Usuario no encontrado en public.profiles.');
         setIsAdding(false);
         return;
       }
 
-      // 1. Crear conversacion
+      // 2. Crear conversacion en public.conversations
       const { data: convo, error: convoError } = await supabase
         .schema('public')
         .from('conversations')
@@ -222,34 +235,38 @@ export default function TelegramView() {
         return;
       }
 
-      // 2. Insert doble EXPLÍCITO en chat_members (remitente y destinatario) en una sola secuencia
-      const { error: membersError } = await supabase
+      // 3. DOS INSERTS EXPLÍCITOS E INDIVIDUALES en public.chat_members
+      // Remitente (auth.uid)
+      const { error: err1 } = await supabase
         .schema('public')
         .from('chat_members')
-        .insert([
-          { conversation_id: convo.id, user_id: currentUserId },
-          { conversation_id: convo.id, user_id: userToAdd.id }
-        ]);
+        .insert({ conversation_id: convo.id, user_id: currentUserId });
 
-      if (membersError) {
-        console.error('Error al añadir miembros:', membersError);
-        alert(`Error al añadir miembros: ${membersError.message}`);
+      // Destinatario (usuario encontrado)
+      const { error: err2 } = await supabase
+        .schema('public')
+        .from('chat_members')
+        .insert({ conversation_id: convo.id, user_id: userToAdd.id });
+
+      if (err1 || err2) {
+        console.error('Error al añadir miembros:', err1, err2);
+        alert(`Error al configurar los miembros del chat.`);
         setIsAdding(false);
         return;
       }
 
-      // 3. Forzar recarga completa para asegurar datos fiables en el frontend y actualizar UI
+      // 4. Forzar recarga desde la base de datos para sincronizar todo el estado
       await fetchAllConversations(currentUserId);
       
       const newConvo = await fetchSingleConversation(convo.id);
       if (newConvo) {
-        handleSelectConvo(newConvo); // Set active and save to localStorage
+        handleSelectConvo(newConvo);
       }
       
       setShowAddForm(false);
       setSearchUsername('');
     } catch (err) {
-      console.error('Error general en startChat:', err);
+      console.error('Error crítico en startChat:', err);
     }
     setIsAdding(false);
   };
@@ -257,68 +274,88 @@ export default function TelegramView() {
   return (
     <div className="flex h-[calc(100vh-10rem)] gap-4">
       {/* Contact List */}
-      <div className="hidden md:flex flex-col w-72 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5">
-        <div className="p-4 border-b border-white/10 flex justify-between items-center">
+      <div className="hidden md:flex flex-col w-72 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5 relative">
+        <div className="p-4 border-b border-white/10 flex justify-between items-center z-10">
           <h3 className="text-sm font-medium text-white">Mensajes</h3>
           <button onClick={() => setShowAddForm(!showAddForm)} className="text-zinc-400 hover:text-white transition-colors">
             <UserPlus size={16} />
           </button>
         </div>
         
-        {showAddForm && (
-          <div className="p-3 bg-white/5 border-b border-white/10">
-            <input 
-              type="text" 
-              placeholder="Email o Usuario..." 
-              value={searchUsername}
-              onChange={(e) => setSearchUsername(e.target.value)}
-              className="w-full bg-black/40 text-white placeholder-zinc-500 text-xs px-3 py-2 rounded-lg outline-none border border-white/10 focus:border-white/20"
-            />
-            <GlassButton size="sm" className="w-full mt-2" onClick={startChat} loading={isAdding}>
-              Crear Chat
-            </GlassButton>
-          </div>
-        )}
+        <AnimatePresence>
+          {showAddForm && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="px-3 py-3 bg-white/5 border-b border-white/10 z-0 overflow-hidden"
+            >
+              <input 
+                type="text" 
+                placeholder="Email o Usuario..." 
+                value={searchUsername}
+                onChange={(e) => setSearchUsername(e.target.value)}
+                className="w-full bg-black/40 text-white placeholder-zinc-500 text-xs px-3 py-2 rounded-lg outline-none border border-white/10 focus:border-white/20"
+              />
+              <GlassButton size="sm" className="w-full mt-2" onClick={startChat} loading={isAdding}>
+                Crear Chat
+              </GlassButton>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {conversations.map((c, i) => {
-            const otherMember = c.members?.find((m: any) => m.profiles?.id !== currentUserId)?.profiles || c.members?.[0]?.profiles || { full_name: 'Chat', username: 'C' };
-            const initials = (otherMember.full_name || otherMember.username || 'C').substring(0, 2).toUpperCase();
-            
-            return (
-              <motion.button
-                key={c.id}
-                initial={{ opacity: 0, x: -15 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                onClick={() => handleSelectConvo(c)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all duration-300 ${
-                  activeConvo?.id === c.id ? 'bg-white/10 border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.03)]' : 'hover:bg-white/5'
-                }`}
-              >
-                <div className="w-9 h-9 rounded-full bg-black/40 backdrop-blur-xl border border-white/10 flex items-center justify-center text-xs text-white font-medium shrink-0">
-                  {initials}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white font-medium truncate">{c.name === 'Chat Privado' ? (otherMember.full_name || otherMember.username) : c.name}</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-500 truncate">Ver conversación</p>
-                </div>
-              </motion.button>
-            );
-          })}
-          {conversations.length === 0 && !showAddForm && (
-            <div className="p-4 text-center text-zinc-500 text-xs">
-              No tienes conversaciones. Haz clic en el botón + para empezar.
+        <div className="flex-1 overflow-y-auto p-2 space-y-1 relative">
+          {isInitializing ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500 gap-2">
+              <Loader2 size={20} className="animate-spin text-zinc-400" />
+              <span className="text-xs font-medium tracking-wide">Cargando chats...</span>
             </div>
+          ) : (
+            <>
+              {conversations.map((c, i) => {
+                const otherMember = c.members?.find((m: any) => m.profiles?.id !== currentUserId)?.profiles || c.members?.[0]?.profiles || { full_name: 'Chat', username: 'C' };
+                const initials = (otherMember.full_name || otherMember.username || 'C').substring(0, 2).toUpperCase();
+                
+                return (
+                  <motion.button
+                    key={c.id}
+                    initial={{ opacity: 0, x: -15 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => handleSelectConvo(c)}
+                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all duration-300 ${
+                      activeConvo?.id === c.id ? 'bg-white/10 border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.03)]' : 'hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-black/40 backdrop-blur-xl border border-white/10 flex items-center justify-center text-xs text-white font-medium shrink-0">
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-white font-medium truncate">{c.name === 'Chat Privado' ? (otherMember.full_name || otherMember.username) : c.name}</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 truncate">Ver conversación</p>
+                    </div>
+                  </motion.button>
+                );
+              })}
+              {conversations.length === 0 && !showAddForm && (
+                <div className="p-4 text-center text-zinc-500 text-xs">
+                  No tienes conversaciones activas. <br/>Haz clic en + para empezar.
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {/* Chat Panel */}
-      <div className="flex-1 flex flex-col bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5">
-        {activeConvo ? (
+      <div className="flex-1 flex flex-col bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5 relative">
+        {isInitializing ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 size={24} className="animate-spin text-zinc-500" />
+          </div>
+        ) : activeConvo ? (
           <>
             {/* Chat Header */}
             <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10 bg-white/5">
@@ -359,7 +396,7 @@ export default function TelegramView() {
                       {!isMe && msg.sender && (
                         <p className="text-[10px] text-zinc-400 font-medium mb-1">{msg.sender.full_name || msg.sender.username}</p>
                       )}
-                      <p className={`text-sm ${isMe ? 'font-medium' : 'font-light'} leading-relaxed`}>{msg.content}</p>
+                      <p className={`text-sm ${isMe ? 'font-medium' : 'font-light'} leading-relaxed break-words`}>{msg.content}</p>
                       <p className={`text-[9px] mt-1.5 text-right ${isMe ? 'text-zinc-400' : 'text-zinc-500'}`}>{msgTime}</p>
                     </div>
                   </motion.div>
@@ -393,8 +430,9 @@ export default function TelegramView() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm font-medium">
-            Selecciona o crea una conversación para empezar.
+          <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2">
+            <span className="text-sm font-medium tracking-wide">Ninguna conversación seleccionada</span>
+            <span className="text-xs text-zinc-600">Inicia un chat desde el panel izquierdo</span>
           </div>
         )}
       </div>
