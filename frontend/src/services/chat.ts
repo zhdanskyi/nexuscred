@@ -58,10 +58,20 @@ export async function findProfileByEmailOrUsername(input: string): Promise<Profi
   const trimmed = input.trim();
   if (!trimmed) return null;
 
-  // Supabase Auth email is not in public.profiles by default.
-  // We treat "email@domain" as "username=email".
-  const username = trimmed.includes('@') ? trimmed.split('@')[0] : trimmed;
+  // 1) Try real email lookup if your profiles table has email column.
+  if (trimmed.includes('@')) {
+    const { data, error } = await supabase
+      .schema('public')
+      .from('profiles')
+      .select('id, full_name, username')
+      .eq('email', trimmed)
+      .single();
 
+    if (!error && data) return data;
+  }
+
+  // 2) Fallback to username lookup (common case in this repo schema)
+  const username = trimmed.includes('@') ? trimmed.split('@')[0] : trimmed;
   const { data, error } = await supabase
     .schema('public')
     .from('profiles')
@@ -74,15 +84,25 @@ export async function findProfileByEmailOrUsername(input: string): Promise<Profi
 }
 
 export async function getMyConversations(userId: string): Promise<Conversation[]> {
+  // Load from chat_members (anti-borrado + matches SQL requirement)
   const { data, error } = await supabase
     .schema('public')
-    .from('conversations')
-    .select('id, name, created_at, chat_members!inner(user_id, profiles(full_name, username, id))')
-    .eq('chat_members.user_id', userId)
-    .order('created_at', { ascending: false });
+    .from('chat_members')
+    .select(
+      'conversation:conversations(id, name, created_at, chat_members(user_id, profiles(full_name, username, id)))'
+    )
+    .eq('user_id', userId);
 
   if (error || !data) return [];
-  return data.map(normalizeConversation);
+
+  const convos = (data as any[])
+    .map((row) => row.conversation)
+    .filter(Boolean) as ConversationRow[];
+
+  // Local sort by created_at desc (since we query members table)
+  convos.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+
+  return convos.map(normalizeConversation);
 }
 
 export async function getConversation(conversationId: string): Promise<Conversation | null> {
@@ -116,7 +136,7 @@ export async function createConversationAndMembers(params: {
   currentUserId: string;
   otherUserId: string;
   name?: string | null;
-}): Promise<{ conversationId: string } | { error: string }> {
+}): Promise<{ conversationId: string } | { error: string; stage: 'conversations' | 'chat_members' }> {
   const { currentUserId, otherUserId, name } = params;
 
   // 1) Create conversation
@@ -128,7 +148,8 @@ export async function createConversationAndMembers(params: {
     .single();
 
   if (convoError || !convo?.id) {
-    return { error: convoError?.message ?? 'No se pudo crear la conversación.' };
+    console.error('[chat] insert conversations failed', convoError);
+    return { error: convoError?.message ?? 'No se pudo crear la conversación.', stage: 'conversations' };
   }
 
   // 2) Insert TWO chat_members rows (crucial)
@@ -141,7 +162,8 @@ export async function createConversationAndMembers(params: {
     ]);
 
   if (membersError) {
-    return { error: membersError.message };
+    console.error('[chat] insert chat_members failed', membersError);
+    return { error: membersError.message, stage: 'chat_members' };
   }
 
   return { conversationId: convo.id };
