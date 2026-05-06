@@ -130,12 +130,12 @@ export default function CryptoVault() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-black/40 backdrop-blur-2xl border border-white/5 flex items-center justify-center">
-            <Shield size={16} className="text-white/40" strokeWidth={1.5} />
+          <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-2xl border border-white/40 flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+            <Shield size={16} className="text-white" strokeWidth={1.5} />
           </div>
           <div>
-            <h2 className="text-lg font-light text-white/70">CryptoVault</h2>
-            <p className="text-[11px] text-white/20">Credenciales con prueba criptográfica</p>
+            <h2 className="text-lg font-medium text-slate-100">CryptoVault</h2>
+            <p className="text-[11px] text-white/70">Credenciales con prueba criptográfica</p>
           </div>
         </div>
         <GlassButton onClick={() => { setShowForm(!showForm); reset(); setRevealedHash(''); }} size="sm">
@@ -156,29 +156,29 @@ export default function CryptoVault() {
             <GlassCard variant="elevated" hover={false} className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] text-white/20 uppercase tracking-widest mb-2">Título</label>
+                  <label className="block text-[10px] text-slate-100/70 uppercase tracking-widest mb-2 font-medium">Título</label>
                   <input
                     type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     placeholder="Ej: Full Stack Developer"
-                    className="w-full bg-black/40 backdrop-blur-2xl border border-white/5 rounded-xl px-4 py-3 text-sm text-white/70 placeholder-white/15 outline-none focus:border-white/15 transition-colors"
+                    className="w-full bg-white/10 backdrop-blur-2xl border border-white/20 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-white/40 outline-none focus:border-white/40 transition-colors shadow-inner"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-white/20 uppercase tracking-widest mb-2">Trabajador</label>
+                  <label className="block text-[10px] text-slate-100/70 uppercase tracking-widest mb-2 font-medium">Trabajador</label>
                   <input
                     type="text" value={formData.worker} onChange={(e) => setFormData({ ...formData, worker: e.target.value })}
                     placeholder="Nombre del receptor"
-                    className="w-full bg-black/40 backdrop-blur-2xl border border-white/5 rounded-xl px-4 py-3 text-sm text-white/70 placeholder-white/15 outline-none focus:border-white/15 transition-colors"
+                    className="w-full bg-white/10 backdrop-blur-2xl border border-white/20 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-white/40 outline-none focus:border-white/40 transition-colors shadow-inner"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] text-white/20 uppercase tracking-widest mb-2">Descripción</label>
+                <label className="block text-[10px] text-slate-100/70 uppercase tracking-widest mb-2 font-medium">Descripción</label>
                 <textarea
                   value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Descripción de la credencial..."
                   rows={2}
-                  className="w-full bg-black/40 backdrop-blur-2xl border border-white/5 rounded-xl px-4 py-3 text-sm text-white/70 placeholder-white/15 outline-none focus:border-white/15 transition-colors resize-none"
+                  className="w-full bg-white/10 backdrop-blur-2xl border border-white/20 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-white/40 outline-none focus:border-white/40 transition-colors resize-none shadow-inner"
                 />
               </div>
 
@@ -187,20 +187,20 @@ export default function CryptoVault() {
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="bg-black/60 rounded-xl border border-white/[0.03] p-5 space-y-3"
+                  className="bg-white/5 rounded-xl border border-white/10 p-5 space-y-3 shadow-inner"
                 >
                   <div className="flex items-center gap-2">
-                    <Cpu size={14} className={isHashing ? 'text-amber-400/50 animate-pulse' : 'text-emerald-400/50'} />
-                    <span className="text-xs text-white/30 font-mono tracking-wider">
+                    <Cpu size={14} className={isHashing ? 'text-amber-300 animate-pulse' : 'text-emerald-300'} />
+                    <span className="text-xs text-white/80 font-mono tracking-wider font-medium">
                       {isHashing ? 'Mining Proof...' : '✓ Proof Generated'}
                     </span>
                   </div>
 
                   {/* Progress Bar */}
                   {isHashing && (
-                    <div className="h-1 rounded-full bg-white/[0.04] overflow-hidden">
+                    <div className="h-1 rounded-full bg-white/10 overflow-hidden">
                       <motion.div
-                        className="h-full rounded-full bg-gradient-to-r from-amber-500/30 to-amber-400/60"
+                        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-200"
                         animate={{ width: `${progress}%` }}
                         transition={{ duration: 0.3 }}
                       />
@@ -210,10 +210,10 @@ export default function CryptoVault() {
                   {/* Hash Typewriter Reveal */}
                   {(revealedHash || isRevealing) && (
                     <div className="flex items-start gap-2">
-                      <Hash size={12} className="text-white/10 mt-1 shrink-0" />
-                      <p className="font-mono text-xs text-[#c0c0c0] break-all leading-relaxed">
+                      <Hash size={12} className="text-white/40 mt-1 shrink-0" />
+                      <p className="font-mono text-xs text-white/90 break-all leading-relaxed">
                         {revealedHash}
-                        {isRevealing && <span className="animate-pulse text-white/40">▋</span>}
+                        {isRevealing && <span className="animate-pulse text-white/80">▋</span>}
                       </p>
                     </div>
                   )}
@@ -241,22 +241,22 @@ export default function CryptoVault() {
             <GlassCard className="p-5 space-y-3" glow>
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-sm font-light text-white/60">{cred.title}</h3>
-                  <p className="text-xs text-white/25 mt-0.5">{cred.worker}</p>
+                  <h3 className="text-sm font-medium text-slate-100">{cred.title}</h3>
+                  <p className="text-xs text-white/70 mt-0.5">{cred.worker}</p>
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-400/5">
-                  <CheckCircle2 size={10} className="text-emerald-400/50" />
-                  <span className="text-[10px] text-emerald-400/50">Verificada</span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-400/20 border border-emerald-400/30 shadow-[0_0_10px_rgba(52,211,153,0.2)]">
+                  <CheckCircle2 size={10} className="text-emerald-300" />
+                  <span className="text-[10px] text-emerald-100 font-medium">Verificada</span>
                 </div>
               </div>
-              <div className="bg-black/40 rounded-lg p-3 border border-white/[0.03]">
+              <div className="bg-white/5 rounded-lg p-3 border border-white/10 shadow-inner">
                 <div className="flex items-center gap-2 mb-1">
-                  <Hash size={10} className="text-white/10" />
-                  <span className="text-[10px] text-white/15 uppercase tracking-widest">SHA-256 Proof</span>
+                  <Hash size={10} className="text-white/50" />
+                  <span className="text-[10px] text-white/60 uppercase tracking-widest font-medium">SHA-256 Proof</span>
                 </div>
-                <p className="font-mono text-[11px] text-[#c0c0c0]/60 break-all leading-relaxed">{cred.hash}</p>
+                <p className="font-mono text-[11px] text-white/80 break-all leading-relaxed">{cred.hash}</p>
               </div>
-              <p className="text-[10px] text-white/10 font-mono">
+              <p className="text-[10px] text-white/40 font-mono">
                 {new Date(cred.timestamp).toLocaleDateString('es', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             </GlassCard>

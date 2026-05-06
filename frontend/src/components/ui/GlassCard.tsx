@@ -13,9 +13,9 @@ interface GlassCardProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
 }
 
 const variants = {
-  default: 'bg-black/40 backdrop-blur-2xl border border-white/5',
-  elevated: 'bg-black/50 backdrop-blur-3xl border border-white/8 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)]',
-  subtle: 'bg-white/[0.02] backdrop-blur-xl border border-white/[0.03]',
+  default: 'bg-white/20 backdrop-blur-xl border border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.1)]',
+  elevated: 'bg-white/30 backdrop-blur-2xl border border-white/50 shadow-[0_8px_32px_rgba(255,255,255,0.2),0_0_20px_rgba(255,255,255,0.2)]',
+  subtle: 'bg-white/10 backdrop-blur-lg border border-white/20',
 };
 
 export default function GlassCard({
@@ -34,7 +34,7 @@ export default function GlassCard({
       className={clsx(
         'rounded-2xl transition-all duration-300',
         variants[variant],
-        glow && 'hover:shadow-[0_0_40px_rgba(255,255,255,0.04)]',
+        glow && 'hover:shadow-[0_0_40px_rgba(255,255,255,0.4)]',
         className
       )}
       {...props}

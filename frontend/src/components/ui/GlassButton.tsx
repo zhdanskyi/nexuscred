@@ -23,9 +23,9 @@ export default function GlassButton({
   const base = 'relative overflow-hidden rounded-2xl font-light tracking-wide transition-all duration-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed';
 
   const variantStyles = {
-    default: 'bg-black/40 backdrop-blur-2xl border border-white/5 text-white/70 hover:bg-black/50 hover:border-white/10 hover:shadow-[0_0_30px_rgba(255,255,255,0.03)]',
-    primary: 'bg-white/90 text-black border border-white/95 font-normal hover:bg-white hover:shadow-[0_0_50px_rgba(255,255,255,0.12)]',
-    ghost: 'bg-transparent border border-transparent text-white/30 hover:text-white/50 hover:bg-white/[0.03]',
+    default: 'bg-white/20 backdrop-blur-xl border border-white/40 text-slate-100 hover:bg-white/30 hover:border-white/60 hover:shadow-[0_0_30px_rgba(255,255,255,0.2)]',
+    primary: 'bg-white text-black border border-white/95 font-medium hover:bg-white/90 hover:shadow-[0_0_50px_rgba(255,255,255,0.4)]',
+    ghost: 'bg-transparent border border-transparent text-slate-100/70 hover:text-white hover:bg-white/10',
   };
 
   const sizeStyles = {
