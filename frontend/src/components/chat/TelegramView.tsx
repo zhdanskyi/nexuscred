@@ -63,8 +63,19 @@ export default function TelegramView() {
       
       if (convos) {
         setConversations(convos);
-        // Si no hay chat activo, selecciona el primero
-        setActiveConvo(prev => prev ? convos.find(c => c.id === prev.id) || convos[0] : convos[0]);
+        
+        // Restaurar estado de sesión (persistencia entre pestañas)
+        const savedConvoId = localStorage.getItem('nexus_active_chat');
+        if (savedConvoId) {
+          const found = convos.find(c => c.id === savedConvoId);
+          if (found) {
+            setActiveConvo(found);
+            return;
+          }
+        }
+        
+        // Fallback al primero
+        setActiveConvo(convos[0]);
       }
     }
   }, []);
@@ -83,7 +94,7 @@ export default function TelegramView() {
 
     init();
 
-    // Escuchar si alguien nos añade a una nueva conversación
+    // Escuchar si alguien nos añade a una nueva conversación en chat_members
     const membersChannel = supabase
       .channel('chat_members_inserts')
       .on('postgres_changes', { 
@@ -91,7 +102,6 @@ export default function TelegramView() {
         schema: 'public', 
         table: 'chat_members'
       }, async (payload) => {
-        // Si el nuevo registro es para nosotros
         if (payload.new.user_id === userId) {
           const newConvo = await fetchSingleConversation(payload.new.conversation_id);
           if (newConvo) {
@@ -108,6 +118,12 @@ export default function TelegramView() {
       supabase.removeChannel(membersChannel);
     };
   }, [fetchAllConversations]);
+
+  // Manejar el cambio manual de conversación para guardar el estado
+  const handleSelectConvo = (convo: Conversation) => {
+    setActiveConvo(convo);
+    localStorage.setItem('nexus_active_chat', convo.id);
+  };
 
   // Fetch y Realtime de Mensajes del Chat Activo
   useEffect(() => {
@@ -172,15 +188,17 @@ export default function TelegramView() {
     });
   };
 
-  const handleAddUser = async () => {
+  const startChat = async () => {
     if (!searchUsername.trim()) return;
     setIsAdding(true);
     try {
+      const targetUsername = searchUsername.split('@')[0];
+      
       const { data: userToAdd, error: userError } = await supabase
         .schema('public')
         .from('profiles')
         .select('id, full_name, username')
-        .eq('username', searchUsername.split('@')[0])
+        .eq('username', targetUsername)
         .single();
       
       if (userError || !userToAdd) {
@@ -204,7 +222,7 @@ export default function TelegramView() {
         return;
       }
 
-      // 2. Insert doble EXPLÍCITO en chat_members (remitente y destinatario)
+      // 2. Insert doble EXPLÍCITO en chat_members (remitente y destinatario) en una sola secuencia
       const { error: membersError } = await supabase
         .schema('public')
         .from('chat_members')
@@ -220,19 +238,18 @@ export default function TelegramView() {
         return;
       }
 
-      // Forzar recarga completa para asegurar datos fiables en el frontend
+      // 3. Forzar recarga completa para asegurar datos fiables en el frontend y actualizar UI
       await fetchAllConversations(currentUserId);
       
-      // Intentar setear la conversacion activa
       const newConvo = await fetchSingleConversation(convo.id);
       if (newConvo) {
-        setActiveConvo(newConvo);
+        handleSelectConvo(newConvo); // Set active and save to localStorage
       }
       
       setShowAddForm(false);
       setSearchUsername('');
     } catch (err) {
-      console.error('Error general en handleAddUser:', err);
+      console.error('Error general en startChat:', err);
     }
     setIsAdding(false);
   };
@@ -240,7 +257,7 @@ export default function TelegramView() {
   return (
     <div className="flex h-[calc(100vh-10rem)] gap-4">
       {/* Contact List */}
-      <div className="hidden md:flex flex-col w-72 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5">
+      <div className="hidden md:flex flex-col w-72 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5">
         <div className="p-4 border-b border-white/10 flex justify-between items-center">
           <h3 className="text-sm font-medium text-white">Mensajes</h3>
           <button onClick={() => setShowAddForm(!showAddForm)} className="text-zinc-400 hover:text-white transition-colors">
@@ -257,7 +274,7 @@ export default function TelegramView() {
               onChange={(e) => setSearchUsername(e.target.value)}
               className="w-full bg-black/40 text-white placeholder-zinc-500 text-xs px-3 py-2 rounded-lg outline-none border border-white/10 focus:border-white/20"
             />
-            <GlassButton size="sm" className="w-full mt-2" onClick={handleAddUser} loading={isAdding}>
+            <GlassButton size="sm" className="w-full mt-2" onClick={startChat} loading={isAdding}>
               Crear Chat
             </GlassButton>
           </div>
@@ -265,7 +282,7 @@ export default function TelegramView() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {conversations.map((c, i) => {
-            const otherMember = c.members?.find((m: any) => m.profiles?.username !== searchUsername && m.profiles?.id !== currentUserId)?.profiles || c.members?.[0]?.profiles || { full_name: 'Chat', username: 'C' };
+            const otherMember = c.members?.find((m: any) => m.profiles?.id !== currentUserId)?.profiles || c.members?.[0]?.profiles || { full_name: 'Chat', username: 'C' };
             const initials = (otherMember.full_name || otherMember.username || 'C').substring(0, 2).toUpperCase();
             
             return (
@@ -274,7 +291,7 @@ export default function TelegramView() {
                 initial={{ opacity: 0, x: -15 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
-                onClick={() => setActiveConvo(c)}
+                onClick={() => handleSelectConvo(c)}
                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all duration-300 ${
                   activeConvo?.id === c.id ? 'bg-white/10 border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.03)]' : 'hover:bg-white/5'
                 }`}
@@ -300,7 +317,7 @@ export default function TelegramView() {
       </div>
 
       {/* Chat Panel */}
-      <div className="flex-1 flex flex-col bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5">
+      <div className="flex-1 flex flex-col bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl shadow-white/5">
         {activeConvo ? (
           <>
             {/* Chat Header */}
