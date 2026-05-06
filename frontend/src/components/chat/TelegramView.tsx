@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Paperclip, Plus, UserPlus } from 'lucide-react';
+import { Send, Paperclip, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import GlassButton from '@/components/ui/GlassButton';
 
@@ -34,44 +34,100 @@ export default function TelegramView() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Funciones de fetch extraídas para reusabilidad
+  const fetchSingleConversation = async (convoId: string) => {
+    const { data: convo } = await supabase
+      .schema('public')
+      .from('conversations')
+      .select('*, chat_members(user_id, profiles!inner(full_name, username))')
+      .eq('id', convoId)
+      .single();
+    return convo;
+  };
+
+  const fetchAllConversations = useCallback(async (userId: string) => {
+    const { data: members } = await supabase
+      .schema('public')
+      .from('chat_members')
+      .select('conversation_id')
+      .eq('user_id', userId);
+
+    if (members && members.length > 0) {
+      const convoIds = members.map(m => m.conversation_id);
+      const { data: convos } = await supabase
+        .schema('public')
+        .from('conversations')
+        .select('*, chat_members(user_id, profiles!inner(full_name, username))')
+        .in('id', convoIds)
+        .order('created_at', { ascending: false });
+      
+      if (convos) {
+        setConversations(convos);
+        // Si no hay chat activo, selecciona el primero
+        setActiveConvo(prev => prev ? convos.find(c => c.id === prev.id) || convos[0] : convos[0]);
+      }
+    }
+  }, []);
+
+  // Inicialización y Realtime de Nuevas Conversaciones
   useEffect(() => {
+    let userId = '';
+    
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
-      setCurrentUserId(session.user.id);
-
-      const { data: members } = await supabase
-        .from('chat_members')
-        .select('conversation_id')
-        .eq('user_id', session.user.id);
-
-      if (members && members.length > 0) {
-        const convoIds = members.map(m => m.conversation_id);
-        const { data: convos } = await supabase
-          .from('conversations')
-          .select('*, chat_members(user_id, profiles!inner(full_name, username))')
-          .in('id', convoIds);
-        
-        if (convos) {
-          setConversations(convos);
-          setActiveConvo(convos[0]);
-        }
-      }
+      userId = session.user.id;
+      setCurrentUserId(userId);
+      await fetchAllConversations(userId);
     };
-    init();
-  }, []);
 
+    init();
+
+    // Escuchar si alguien nos añade a una nueva conversación
+    const membersChannel = supabase
+      .channel('chat_members_inserts')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'chat_members'
+      }, async (payload) => {
+        // Si el nuevo registro es para nosotros
+        if (payload.new.user_id === userId) {
+          const newConvo = await fetchSingleConversation(payload.new.conversation_id);
+          if (newConvo) {
+            setConversations(prev => {
+              if (prev.find(c => c.id === newConvo.id)) return prev;
+              return [newConvo, ...prev];
+            });
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(membersChannel);
+    };
+  }, [fetchAllConversations]);
+
+  // Fetch y Realtime de Mensajes del Chat Activo
   useEffect(() => {
     if (!activeConvo) return;
+    
+    let isMounted = true;
+    
     const fetchMsgs = async () => {
       const { data } = await supabase
+        .schema('public')
         .from('messages')
         .select('*, sender:profiles!messages_sender_id_fkey(full_name, username)')
         .eq('conversation_id', activeConvo.id)
         .order('created_at', { ascending: true });
       
-      if (data) setMessages(data);
+      if (isMounted && data) {
+        setMessages(data);
+      }
     };
+    
     fetchMsgs();
 
     const channel = supabase
@@ -83,6 +139,7 @@ export default function TelegramView() {
         filter: `conversation_id=eq.${activeConvo.id}`
       }, async (payload) => {
         const { data: profile } = await supabase
+          .schema('public')
           .from('profiles')
           .select('full_name, username')
           .eq('id', payload.new.sender_id)
@@ -94,6 +151,7 @@ export default function TelegramView() {
       .subscribe();
 
     return () => {
+      isMounted = false;
       supabase.removeChannel(channel);
     };
   }, [activeConvo]);
@@ -107,7 +165,7 @@ export default function TelegramView() {
     const text = messageText;
     setMessageText(''); 
     
-    await supabase.from('messages').insert({
+    await supabase.schema('public').from('messages').insert({
       sender_id: currentUserId,
       conversation_id: activeConvo.id,
       content: text
@@ -127,51 +185,52 @@ export default function TelegramView() {
       
       if (userError || !userToAdd) {
         console.error('Usuario no encontrado en public.profiles:', userError);
-        alert('Usuario no encontrado en la base de datos (public.profiles).');
+        alert('Usuario no encontrado en la base de datos.');
         setIsAdding(false);
         return;
       }
 
-      // Crear conversacion
+      // 1. Crear conversacion
       const { data: convo, error: convoError } = await supabase
         .schema('public')
         .from('conversations')
         .insert({ name: `Chat Privado` })
         .select().single();
 
-      if (convoError) {
-        console.error('Error al crear conversación (public.conversations):', convoError);
-        alert(`Error al crear la conversación: ${convoError.message}`);
+      if (convoError || !convo) {
+        console.error('Error al crear conversación:', convoError);
+        alert(`Error al crear la conversación: ${convoError?.message}`);
         setIsAdding(false);
         return;
       }
 
-      if (convo) {
-        // Insert doble en chat_members
-        const { error: membersError } = await supabase
-          .schema('public')
-          .from('chat_members')
-          .insert([
-            { conversation_id: convo.id, user_id: currentUserId },
-            { conversation_id: convo.id, user_id: userToAdd.id }
-          ]);
+      // 2. Insert doble EXPLÍCITO en chat_members (remitente y destinatario)
+      const { error: membersError } = await supabase
+        .schema('public')
+        .from('chat_members')
+        .insert([
+          { conversation_id: convo.id, user_id: currentUserId },
+          { conversation_id: convo.id, user_id: userToAdd.id }
+        ]);
 
-        if (membersError) {
-          console.error('Error al añadir miembros (public.chat_members):', membersError);
-          alert(`Error al añadir miembros: ${membersError.message}`);
-          setIsAdding(false);
-          return;
-        }
-
-        const newConvo = {
-          ...convo,
-          members: [{ profiles: userToAdd }]
-        };
-        setConversations(prev => [...prev, newConvo]);
-        setActiveConvo(newConvo); // Abre chat auto
-        setShowAddForm(false);
-        setSearchUsername('');
+      if (membersError) {
+        console.error('Error al añadir miembros:', membersError);
+        alert(`Error al añadir miembros: ${membersError.message}`);
+        setIsAdding(false);
+        return;
       }
+
+      // Forzar recarga completa para asegurar datos fiables en el frontend
+      await fetchAllConversations(currentUserId);
+      
+      // Intentar setear la conversacion activa
+      const newConvo = await fetchSingleConversation(convo.id);
+      if (newConvo) {
+        setActiveConvo(newConvo);
+      }
+      
+      setShowAddForm(false);
+      setSearchUsername('');
     } catch (err) {
       console.error('Error general en handleAddUser:', err);
     }
@@ -206,7 +265,7 @@ export default function TelegramView() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {conversations.map((c, i) => {
-            const otherMember = c.members?.find((m: any) => m.profiles?.username !== searchUsername)?.profiles || c.members?.[0]?.profiles || { full_name: 'Chat', username: 'C' };
+            const otherMember = c.members?.find((m: any) => m.profiles?.username !== searchUsername && m.profiles?.id !== currentUserId)?.profiles || c.members?.[0]?.profiles || { full_name: 'Chat', username: 'C' };
             const initials = (otherMember.full_name || otherMember.username || 'C').substring(0, 2).toUpperCase();
             
             return (
