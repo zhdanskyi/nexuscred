@@ -119,41 +119,46 @@ export default function TelegramView() {
     setIsAdding(true);
     try {
       const { data: userToAdd, error: userError } = await supabase
+        .schema('public')
         .from('profiles')
         .select('id, full_name, username')
         .eq('username', searchUsername.split('@')[0])
         .single();
       
       if (userError || !userToAdd) {
-        console.error('Usuario no encontrado:', userError);
-        alert('Usuario no encontrado en la tabla profiles.');
+        console.error('Usuario no encontrado en public.profiles:', userError);
+        alert('Usuario no encontrado en la base de datos (public.profiles).');
         setIsAdding(false);
         return;
       }
 
       // Crear conversacion
       const { data: convo, error: convoError } = await supabase
+        .schema('public')
         .from('conversations')
         .insert({ name: `Chat Privado` })
         .select().single();
 
       if (convoError) {
-        console.error('Error al crear conversación:', convoError);
-        alert('Error al crear conversación. Revisa permisos RLS en conversations.');
+        console.error('Error al crear conversación (public.conversations):', convoError);
+        alert(`Error al crear la conversación: ${convoError.message}`);
         setIsAdding(false);
         return;
       }
 
       if (convo) {
         // Insert doble en chat_members
-        const { error: membersError } = await supabase.from('chat_members').insert([
-          { conversation_id: convo.id, user_id: currentUserId },
-          { conversation_id: convo.id, user_id: userToAdd.id }
-        ]);
+        const { error: membersError } = await supabase
+          .schema('public')
+          .from('chat_members')
+          .insert([
+            { conversation_id: convo.id, user_id: currentUserId },
+            { conversation_id: convo.id, user_id: userToAdd.id }
+          ]);
 
         if (membersError) {
-          console.error('Error al añadir miembros:', membersError);
-          alert('Error al añadir miembros. Revisa permisos RLS en chat_members.');
+          console.error('Error al añadir miembros (public.chat_members):', membersError);
+          alert(`Error al añadir miembros: ${membersError.message}`);
           setIsAdding(false);
           return;
         }
