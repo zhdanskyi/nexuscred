@@ -1,9 +1,95 @@
-NexusCred | Decentralized Trust ProtocolNexusCred es una Single Page Application (SPA) desarrollada para mitigar la asimetría de información y la falta de confianza en los entornos de trabajo remotos y descentralizados. El sistema permite la emisión, almacenamiento y auditoría de credenciales inmutables, proporcionando una capa de verificación técnica sobre la reputación profesional de los trabajadores independientes.📌 Conceptos FundamentalesEl proyecto se basa en la digitalización de la confianza mediante tres pilares operativos:Inmutabilidad de Credenciales: Simulación de pruebas criptográficas ("proofs") que garantizan que una vez emitida una credencial por una entidad, esta no pueda ser alterada ni por el emisor ni por el receptor.Gobernanza de Datos: Los usuarios (freelancers) poseen una billetera digital donde gestionan sus hitos profesionales validados.Auditoría en Tiempo Real: Interfaz diseñada para la inspección inmediata de los registros de trabajo, permitiendo un monitoreo transparente de las relaciones laborales.🛠️ Stack TecnológicoLa arquitectura de la aplicación ha sido seleccionada para garantizar alta disponibilidad y una experiencia de usuario fluida (UX):Frontend: Next.js y React.js para una navegación reactiva.Estilos: Tailwind CSS con una implementación personalizada de Glassmorphism de alto contraste (Apple Design Language).Backend & Autenticación: Supabase (PostgreSQL) para la persistencia de datos y gestión de identidades.Protocolo Realtime: Implementación de WebSockets mediante Supabase Realtime para la sincronización instantánea de mensajería y actualizaciones de estado.🗄️ Arquitectura de la Base de DatosEl esquema relacional ha sido normalizado para asegurar la integridad referencial y la escalabilidad del sistema:TablaDescripciónprofilesAlmacena la identidad digital de los usuarios, incluyendo metadatos, roles y avatares.credentialsRegistro de las pruebas de trabajo, hashes de validación y descripciones inmutables.conversationsEntidades que agrupan a los participantes en canales de comunicación (P2P o grupales).chat_membersTabla puente que gestiona la relación de muchos a muchos entre usuarios y conversaciones.messagesAlmacenamiento de la comunicación histórica, estados de lectura (is_read) y marcas temporales.📂 Estructura del ProyectoPlaintextnexuscred/
-├── components/          # Componentes de interfaz de usuario atómicos y modulares.
-├── lib/                 # Configuración de servicios externos y clientes de API (Supabase).
-├── pages/               # Routing del sistema y vistas principales de la aplicación.
-│   ├── api/             # Endpoints para lógica de servidor (Server-side logic).
-│   └── dashboard/       # Paneles de control para gestión de credenciales.
-├── styles/              # Definiciones de diseño global y configuraciones de Tailwind.
-└── types/               # Tipado estricto de TypeScript para la consistencia de datos.
-🔒 Seguridad y Perspectivas FuturasSeguridad ActualRLS (Row Level Security): Todas las tablas cuentan con políticas de seguridad a nivel de fila, asegurando que los datos solo sean accesibles por los propietarios legítimos o participantes autorizados.Autenticación JWT: Gestión de sesiones mediante tokens firmados para prevenir el secuestro de sesiones.Roadmap TécnicoIntegración Blockchain: Migración de la simulación de credenciales a registros reales en una red Layer 2 (Polygon/Optimism) para garantizar la inmutabilidad pública.Zero-Knowledge Proofs (ZKP): Implementación de pruebas de conocimiento cero para que los usuarios validen competencias sin comprometer datos corporativos sensibles.Auditoría Automatizada por IA: Integración de modelos de lenguaje para verificar la coherencia entre las tareas realizadas y las credenciales emitidas.Encriptación End-to-End: Cifrado de punto a punto en el sistema de mensajería para elevar los estándares de privacidad.🚀 DesplieguePara replicar el entorno de desarrollo:Clonar el repositorio: git clone https://github.com/usuario/nexuscred.gitInstalar dependencias: npm installConfigurar variables de entorno (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY).Ejecutar el servidor de desarrollo: npm run devNexusCred Protocol — Transformando la reputación profesional en activos verificables.
+# NexusCred | Decentralized Trust Protocol
+
+**NexusCred** es una Single Page Application (SPA) de alto rendimiento diseñada para resolver la crisis de confianza en los entornos de trabajo remotos y descentralizados. El sistema permite a las organizaciones emitir credenciales inmutables (simulación de proofs criptográficos) que los profesionales pueden almacenar, gestionar y auditar en tiempo real a través de una interfaz de alta fidelidad.
+
+---
+
+## 📖 Descripción General
+
+En un mercado laboral globalizado, la verificación de la experiencia y los hitos profesionales suele ser lenta y poco fiable. NexusCred actúa como una capa de confianza entre empresas y freelancers:
+
+* **Emisión Inmutable:** Los registros de trabajo se transforman en credenciales inmutables.
+* **Auditoría en Tiempo Real:** Interfaz diseñada para la inspección técnica de procesos y validación de logros.
+* **Comunicación Segura:** Sistema de chat integrado con cifrado lógico y actualizaciones en tiempo real bajo un diseño inspirado en Apple Glass.
+
+---
+
+## 🛠️ Stack Tecnológico
+
+El proyecto utiliza tecnologías modernas para garantizar escalabilidad, seguridad y una experiencia de usuario fluida:
+
+* **Frontend:** [Next.js](https://nextjs.org/) (React Framework) con TypeScript.
+* **Estilos:** [Tailwind CSS](https://tailwindcss.com/) con implementación de Glassmorphism (Dark Mode).
+* **Backend & Auth:** [Supabase](https://supabase.com/) (PostgreSQL) para la gestión de identidades y persistencia.
+* **Sincronización:** WebSockets vía Supabase Realtime para mensajería instantánea.
+
+---
+
+## 🗄️ Estructura de la Base de Datos
+
+El esquema relacional ha sido diseñado para mantener la integridad de las credenciales y la privacidad de las comunicaciones:
+
+| Tabla | Descripción |
+| :--- | :--- |
+| **`profiles`** | Almacena los metadatos de usuario (username, avatar, rol). |
+| **`credentials`** | El registro de pruebas de trabajo y validaciones inmutables. |
+| **`conversations`** | Define los canales de chat (Privados 1:1 o Grupos). |
+| **`chat_members`** | Relación de pertenencia entre usuarios y salas de chat. |
+| **`messages`** | Almacenamiento histórico de comunicaciones y estados de lectura. |
+
+---
+
+## 📂 Estructura del Proyecto
+
+```text
+nexuscred/
+├── components/          # Componentes de UI modulares y reutilizables.
+├── lib/                 # Configuración del cliente Supabase y utilidades.
+├── pages/               # Routing de la aplicación (Dashboard, Audit, Chat).
+├── styles/              # Configuraciones globales de CSS y Tailwind.
+├── types/               # Definiciones de tipos para robustez del código.
+└── sql/                 # Scripts de migración y configuración de base de datos.
+
+
+
+
+
+**🔒 Seguridad y Arquitectura
+Implementación Actual
+Row Level Security (RLS): Cada tabla posee políticas estrictas que impiden el acceso a datos por parte de usuarios no autorizados.
+
+Data Integrity: Uso de llaves foráneas y UUIDs para asegurar la consistencia entre perfiles, conversaciones y mensajes.
+
+Autenticación Real: Gestión de sesiones mediante Supabase Auth con soporte para verificación de correo electrónico.
+
+Roadmap y Perspectivas Futuras
+Migración On-Chain: Evolucionar la simulación de credenciales hacia registros reales en redes de Capa 2 (L2).
+
+Zero-Knowledge Proofs (ZKP): Permitir la validación de competencias sin comprometer información corporativa sensible.
+
+Auditoría mediante IA: Integración de modelos para la verificación automática de coherencia en la emisión de credenciales.
+
+Cifrado End-to-End (E2EE): Capa adicional de privacidad para la comunicación entre usuarios.
+
+🚀 Instalación y Despliegue
+Para replicar el entorno de desarrollo localmente:
+
+Clonar el repositorio:
+
+Bash
+git clone [https://github.com/usuario/nexuscred.git](https://github.com/usuario/nexuscred.git)
+Instalar dependencias:
+
+Bash
+npm install
+Configurar Variables de Entorno:
+Crea un archivo .env.local con las claves de tu proyecto Supabase:
+
+Фрагмент коду
+NEXT_PUBLIC_SUPABASE_URL=tu_url_aqui
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_key_aqui
+Ejecutar el servidor:
+
+Bash
+npm run dev
+NexusCred Protocol — Transformando la reputación profesional en activos verificables.
